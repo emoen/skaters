@@ -436,6 +436,14 @@ Interactive demos (forecasting playground in native JS, and the real Python pack
 - **Pure Python** — zero dependencies, only `math.erf` and `math.exp`
 - **Pyodide compatible** — works in the browser via WebAssembly
 
+## Papers
+
+- **A stronger univariate benchmark for foundational time-series model evaluation**:
+  [PDF](papers/stronger-benchmark/stronger-benchmark.pdf),
+  [reproduce](papers/stronger-benchmark/REPRODUCE.md) (Tier 1 checks every number
+  in seconds: `pip install numpy && python papers/stronger-benchmark/verify_paper.py`).
+- **Transforms all the way down**, the methods paper: [PDF](papers/skaters-jss.pdf).
+
 ## Theoretical context
 
 The online recursions here are **score-driven updates** with a Bayesian reading.

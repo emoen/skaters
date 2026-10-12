@@ -28,6 +28,19 @@ DEVICE = os.environ.get("FM_DEVICE", "cpu")
 LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 
+def _laplace_test_dists(ch, start):
+    """laplace(1)'s predictive for each test point ch[t], t >= start, issued
+    after ch[t-1] was observed (the stepping of arm_adapters.laplace_dists)."""
+    from skaters.api import laplace
+    f = laplace(1); st = None; pend = None; out = []
+    for t, x in enumerate(ch):
+        if t >= start:
+            out.append(pend)
+        d, st = f(x, st)
+        pend = d[0]
+    return out
+
+
 def run():
     from timesfm3 import TimesFM3Evaluator, ModelConfig
     model = TimesFM3Evaluator(ModelConfig(
@@ -48,11 +61,17 @@ def run():
     totals = {name: 0.0 for name in nozzles.NOZZLES}
     n_tot = 0
     spreads = []
+    # laplace on the same points, as the comparator the reconstruction numbers
+    # need (issue #269): per-series mean of laplace minus each nozzle, paired.
+    lap_total = 0.0
+    paired = {name: [] for name in nozzles.NOZZLES}
 
     for sid, ch in picked:
         n = len(ch); start = n - TEST
         ctx_windows = [np.asarray(ch[t - CTX:t], dtype=np.float32) for t in range(start, n)]
         targets = [ch[t] for t in range(start, n)]
+        lap_dists = _laplace_test_dists(ch, start)
+        series_diff = {name: 0.0 for name in nozzles.NOZZLES}
 
         outs = list(model.predict_batch(
             ctx_windows, horizon=1, return_quantiles=True, use_symmetric_averaging=False,
@@ -63,15 +82,25 @@ def run():
             q = q[0] if q.ndim == 3 else q
             q = q[0] if q.ndim == 2 else q
             scores = nozzles.score_all(LEVELS, q, y)
+            lp_lap = max(lap_dists[i].logpdf(y), -20.0)
+            lap_total += lp_lap
             for name, (lp, _) in scores.items():
                 totals[name] += lp
+                series_diff[name] += lp_lap - max(lp, -20.0)
             spreads.append(nozzles.spread(scores))
             n_tot += 1
+        for name in nozzles.NOZZLES:
+            paired[name].append(series_diff[name] / len(targets))
         print(f"  {sid} done", flush=True)
 
     print(f"\n[nozzle] {n_tot} scored points, {len(picked)} series, TimesFM3 fixed:")
     for name in nozzles.NOZZLES:
         print(f"  {name}: mean logpdf {totals[name]/n_tot:+.4f}")
+    print(f"  laplace on the same points: mean logpdf {lap_total/n_tot:+.4f}")
+    for name in nozzles.NOZZLES:
+        d = np.asarray(paired[name])
+        print(f"  laplace minus {name}, per-series mean dLL (floor -20): median {np.median(d):+.4f}, "
+              f"laplace better on {int((d > 0).sum())}/{len(d)} series")
     print(f"  mean per-point nozzle spread (max-min logpdf): {np.mean(spreads):.4f}")
     print(f"  median per-point nozzle spread: {np.median(spreads):.4f}")
     grid_mean = totals["grid"] / n_tot

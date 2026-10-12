@@ -20,8 +20,8 @@ python3 --version          # 3.10 or newer
 ```
 
 The `skaters` package is pure Python with zero dependencies, so the reference
-method needs no install beyond `PYTHONPATH=src`. Tier 1 additionally needs
-nothing at all. Tier 2 needs `numpy`. Tier 3 needs a separate virtual
+method needs no install beyond `PYTHONPATH=src`. Tiers 1 and 2 need `numpy`
+(`pip install numpy`); nothing else. Tier 3 needs a separate virtual
 environment per foundation model, because their dependency sets conflict.
 
 ---
@@ -55,7 +55,7 @@ python papers/stronger-benchmark/verify_paper.py
 That parses every results table and the quoted figures out of
 `stronger-benchmark.tex`,
 re-derives each from the store, and exits non-zero on any mismatch. Expected
-output is one line reporting 10 table rows and 6 prose figures matching.
+output is one line reporting 10 table rows and 13 prose figures matching.
 
 Machine-readable form, for diffing in CI:
 
@@ -137,20 +137,21 @@ skips any (series, method) pair already present, so it is resumable.
 ```bash
 # the reference method, no GPU, no extra dependencies
 PYTHONPATH=src:benchmarks \
-  ARM_METHODS=laplace ARM_CORPUS=monthly PRED_OUT=preds/laplace__monthly.csv \
+  ARM_METHODS=laplace ARM_CORPUS=monthly PRED_OUT=benchmarks/preds/laplace__monthly.csv \
   python benchmarks/run_arm.py
 ```
 
 ```bash
 # a foundation model, in its own environment
 PYTHONPATH=src:benchmarks \
-  ARM_METHODS=TimesFM3 ARM_CORPUS=monthly PRED_OUT=preds/TimesFM3__monthly.csv \
+  ARM_METHODS=TimesFM3 ARM_CORPUS=monthly PRED_OUT=benchmarks/preds/TimesFM3__monthly.csv \
   FM_CTX=128 FM_DEVICE=mps .venv-timesfm3/bin/python benchmarks/run_arm.py
 ```
 
 Corpus arms are `daily`, `weekly`, `monthly` and `m4-hourly`, defined by fixed
 enumeration rules in `benchmarks/corpus.py` and never by hand-picked
-identifiers. Frequency is verified per series from cached dates rather than
+identifiers. `PRED_OUT` must point under `benchmarks/preds/`, where
+`summarize_canonical.py` looks. Frequency is verified per series from cached dates rather than
 trusted from the FRED tag. The protocol for every arm is a 128-length context,
 a rolling one-step-ahead test window, and no fitting.
 

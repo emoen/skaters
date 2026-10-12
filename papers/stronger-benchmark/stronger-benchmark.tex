@@ -475,6 +475,15 @@ measured gap between the model and the reference in every stratum of
 Table~\ref{tab:raw}. Two methods already in independent use elsewhere differ by
 $0.62$ nats.
 
+The reference, scored on the same $3{,}200$ points, has a mean log density of
+$+2.206$, above every reconstruction. Paired per series, the reference minus
+the widest reconstruction has a median of $-0.008$, with the reference ahead on
+$48$ of the $100$ series; against the local reconstruction used in
+Tables~\ref{tab:raw} and \ref{tab:wrapped} the median is $+0.558$, with the
+reference ahead on $75$. The size of the gap in Table~\ref{tab:raw} therefore
+depends on the reconstruction, and under the one most favourable to the model
+the two are level at the median on this sample.
+
 The choice therefore belongs in the protocol, stated rather than assumed. It is
 not peculiar to this study: the \citet{aksu2024gifteval} submission interface
 requires a mean and nine deciles, so a model emitting a genuine density must
@@ -523,6 +532,12 @@ their pretraining table lists Traffic at $862$ series and $15{,}122{,}928$
 observations, and the Monash archive file \citep{zenodo-traffic-hourly} holds
 $862$ series of exactly $17{,}544$ steps.
 
+The finding that a simple method matches an elaborate one is not new:
+\citet{zeng2023transformers} report it for linear models against transformers
+on point forecasts, and \citet{tan2024useful} for ablated language models.
+This paper differs in what is scored (a density, by log score), in the
+reference carrying state, and in the horizon being one step.
+
 A calibration framing would have to engage \citet{adler2026calibrated}, who find
 these models better calibrated than automated ARIMA and N-BEATS on standard
 datasets. Nothing here contradicts that. Calibration on a decile grid and
@@ -538,13 +553,22 @@ open question, and \citet{wang2026spectral} suggest it will not.
 %% -------------------------------------------------------------------------
 \section{Reproduction}\label{sec:repro}
 
-The paper directory holds four files. \code{constants.py} derives every number
-in Sections~\ref{sec:results} and \ref{sec:nozzle} from a version-controlled
+Everything is in the repository
+\url{https://github.com/microprediction/skaters}, directory
+\code{papers/stronger-benchmark}. \code{constants.py} derives every number in
+Sections~\ref{sec:results} and \ref{sec:nozzle} from a version-controlled
 store. \code{verify\_paper.py} re-derives each one, compares it against the
 tables above, and exits non-zero on drift. \code{REPRODUCE.md} gives three
 tiers: the figures check in seconds from committed files, the summaries rebuild
 from per-step records in minutes, and the records regenerate from raw data in
-days.
+days. The first tier is
+\begin{verbatim}
+git clone https://github.com/microprediction/skaters
+cd skaters && pip install numpy
+python papers/stronger-benchmark/verify_paper.py
+\end{verbatim}
+which prints one line reporting the table rows and prose figures that match
+the store.
 
 The data vintage is published as a release asset in the repository
 \code{skaters-\allowbreak benchmarking-\allowbreak data}. \proglang{FRED} revises series, so a fresh

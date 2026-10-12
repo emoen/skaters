@@ -96,6 +96,11 @@ def main():
         ("worst nozzle mean logpdf", round(min(noz["methods"].values()), 3), -0.373),
         ("best nozzle mean logpdf", round(max(noz["methods"].values()), 3), 2.104),
         ("mean per-point spread", round(noz["mean_spread"], 2), 3.13),
+        ("laplace mean logpdf on the nozzle points", round(noz["laplace_mean"], 3), 2.206),
+        ("laplace minus wide, median", round(noz["lap_minus_wide_median"], 3), -0.008),
+        ("laplace minus wide, wins", noz["lap_minus_wide_wins"], 48),
+        ("laplace minus local, median", round(noz["lap_minus_local_median"], 3), 0.558),
+        ("laplace minus local, wins", noz["lap_minus_local_wins"], 75),
         ("local vs grid", round(abs(noz["local_vs_grid"]), 2), 0.62),
     ]
     for name, store_val, paper_val in checks:
