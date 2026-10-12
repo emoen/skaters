@@ -40,14 +40,15 @@ Reported progress for foundation time-series models rests on comparisons that
 leave out a strong classical reference. Across eleven benchmark papers the
 classical arms are per-window refits of ETS, ARIMA and Theta; no online
 forecaster appears, and no suite scores a predictive density. We supply the
-missing reference: \code{laplace}, an online distributional forecaster with no
-pretraining and no tunable parameters. Scored one step ahead on held-out log
-density over an 18{,}815-series panel of \proglang{FRED} and M4-hourly series,
-it beats TimesFM 3.0 on the median series of every stratum by about half a nat.
-A post-hoc log-score portfolio of the reference with the model's recalibrated
-density, needing no retraining, cuts the model's loss rate by up to thirty-nine
-points and still trails the reference at the median. The reference is a
-\code{pip install}, with a \proglang{Rust} core and bit-exact parity.
+missing reference, \code{laplace}, an online distributional forecaster with no
+pretraining and no tunable parameters, and score it against TimesFM 3.0 one
+step ahead on held-out log density over an 18{,}815-series panel of
+\proglang{FRED} and M4-hourly series. The comparison is decided by a step the
+suites leave unstated: how the model's nine quantiles become a density. Under
+a tight reconstruction the reference leads by half a nat on the median series
+of every stratum; under a generous one the two are level at the median, and
+the reference keeps the better coverage. The reference is a \code{pip install},
+with a \proglang{Rust} core and bit-exact parity.
 }
 \date{October 8, 2026}
 
@@ -300,7 +301,9 @@ pretrained checkpoint behind an inference stack does not have.
 
 Sections~\ref{sec:classic} and \ref{sec:results} measure how strong it is.
 \code{laplace} takes the per-series log-likelihood against every classical arm
-in Table~\ref{tab:arms}, and against TimesFM 3.0 in every stratum tested.
+in Table~\ref{tab:arms}. Against TimesFM 3.0 it is level with or ahead of the
+model at the median in every stratum, by a margin that Section~\ref{sec:nozzle}
+shows is set by how the model's quantiles are turned into a density.
 \citet{cotton2026transforms} reports the same ordering against neural and
 foundation-model baselines across the non-price \proglang{FRED} universe;
 \pkg{GARCH}-$t$ on asset prices is the one arm that escapes, and that split is
@@ -421,9 +424,40 @@ which the model loses.}
 \label{tab:raw}
 \end{table}
 
-The model trails the reference on the median series in every stratum, by
-roughly half a nat, and loses on more series than it wins. Half a nat is a large
-gap in log-likelihood terms.
+Under the local reconstruction the model trails the reference on the median
+series in every stratum, by roughly half a nat, and loses on more series than
+it wins.
+
+Table~\ref{tab:wide} rescores the same forecasts under the widest
+reconstruction of Section~\ref{sec:nozzle}, three times the local bandwidth.
+The median gap closes to between $-0.08$ and $+0.05$ nats; the model wins more
+series than it loses on the daily price, weekly and monthly strata; and its
+central 90\%
+coverage rises from the $0.81$ to $0.85$ of Table~\ref{tab:raw} to $0.86$ to
+$0.89$, against the reference's $0.89$ to $0.92$. The half-nat lead belongs to
+the reconstruction, not to the reference. What survives the choice is that the
+reference is never behind at the median by more than $0.05$ nats and is better
+calibrated in every stratum.
+
+\begin{table}[t!]
+\centering
+\begin{tabular}{lrccr}
+\toprule
+Stratum & $N$ & Win / draw / loss & Median $\Delta$LL & Loss rate \\
+\midrule
+Daily, economic       & $2{,}179$ & $178 / 1{,}382 / 619$     & $-0.082$ & $28.4\,\%$ \\
+Daily, price/returns  & $7{,}633$ & $506 / 6{,}925 / 202$     & $-0.008$ & $2.6\,\%$ \\
+Weekly, economic      & $3{,}013$ & $969 / 1{,}418 / 626$     & $+0.001$ & $20.8\,\%$ \\
+Monthly, economic     & $5{,}576$ & $1{,}429 / 3{,}537 / 610$ & $+0.046$ & $10.9\,\%$ \\
+M4-hourly, seasonal   & $414$     & $70 / 214 / 130$          & $-0.014$ & $31.4\,\%$ \\
+\bottomrule
+\end{tabular}
+\caption{The forecasts of Table~\ref{tab:raw} rescored under the widest
+reconstruction (\code{wide} in \code{nozzles.py}, three times the local
+bandwidth). Same series, same test points, same reference; only the step from
+nine quantiles to a density differs.}
+\label{tab:wide}
+\end{table}
 
 Table~\ref{tab:wrapped} repeats the comparison with the model wrapped in a
 post-hoc portfolio: a long-only online log-score blend of the reference with
@@ -480,9 +514,9 @@ $+2.206$, above every reconstruction. Paired per series, the reference minus
 the widest reconstruction has a median of $-0.008$, with the reference ahead on
 $48$ of the $100$ series; against the local reconstruction used in
 Tables~\ref{tab:raw} and \ref{tab:wrapped} the median is $+0.558$, with the
-reference ahead on $75$. The size of the gap in Table~\ref{tab:raw} therefore
-depends on the reconstruction, and under the one most favourable to the model
-the two are level at the median on this sample.
+reference ahead on $75$. At full scale the same choice moves the median gap of
+Table~\ref{tab:raw} by $0.5$ to $0.8$ nats in every stratum
+(Table~\ref{tab:wide}).
 
 The choice therefore belongs in the protocol, stated rather than assumed. It is
 not peculiar to this study: the \citet{aksu2024gifteval} submission interface

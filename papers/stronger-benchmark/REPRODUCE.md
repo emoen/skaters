@@ -55,7 +55,7 @@ python papers/stronger-benchmark/verify_paper.py
 That parses every results table and the quoted figures out of
 `stronger-benchmark.tex`,
 re-derives each from the store, and exits non-zero on any mismatch. Expected
-output is one line reporting 10 table rows and 13 prose figures matching.
+output is one line reporting 15 table rows and 16 prose figures matching.
 
 Machine-readable form, for diffing in CI:
 
