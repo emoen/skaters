@@ -106,6 +106,24 @@ def laplace_dists(ch, h=1, tails="gpd"):
     return out
 
 
+def _hstep_predictives(xs, h):
+    """Run laplace(h) over the series xs and return, for each i, the h-step
+    predictive for xs[i] issued after xs[i-h] was observed (None for i < h).
+
+    This is the maturity rule for a horizon-h forecast: the correction applied
+    to a forecast issued at time t-h may only use values observed by t-h. With
+    h=1 it is laplace(1)'s one-step predictive, as before (#273).
+    """
+    f = laplace(h); st = None; queue = []; out = []
+    for x in xs:
+        out.append(queue[-h][h - 1] if len(queue) >= h else None)
+        d, st = f(x, st)
+        queue.append(d)
+        if len(queue) > h:
+            queue.pop(0)
+    return out
+
+
 # ------------------------------------------------------------------ foundation arms
 _sundial = None
 def sundial_dists(ch, h=1):
@@ -346,13 +364,13 @@ def _resid_sandwich(fm_fn, h=1):
         locs = [d.quantile(0.5) for d in fmx]
         ext = len(ch) - (target + _RESID_WARM)
         resid = [ch[ext + i] - locs[i] for i in range(len(locs))]
-        f = laplace(1); st = None; pend = None; out = []
-        for i, rt in enumerate(resid):
-            if pend is not None and i >= _RESID_WARM:
-                base = pend[0]; loc = locs[i]
-                out.append(fs.quantile_dist(_VLEVELS,
-                                            [loc + base.quantile(p) for p in _VLEVELS]))
-            d, st = f(rt, st); pend = d
+        # Residual r_j is observed at target time j; the forecast for target i
+        # was issued at i-h, so its residual model may only see r_{<=i-h}.
+        preds = _hstep_predictives(resid, h); out = []
+        for i in range(_RESID_WARM, len(resid)):
+            base = preds[i]; loc = locs[i]
+            out.append(fs.quantile_dist(_VLEVELS,
+                                        [loc + base.quantile(p) for p in _VLEVELS]))
         return out
     return run
 
@@ -385,17 +403,18 @@ def pit_sandwich(fm_fn, h=1):
         if fmx is None or len(fmx) < target + _RESID_WARM:
             return None
         ext = len(ch) - (target + _RESID_WARM)
-        f = laplace(1); st = None; pend = None; out = []
-        for i, fd in enumerate(fmx):
-            yt = ch[ext + i]
-            if pend is not None and i >= _RESID_WARM:
-                G = pend
-                yq = [fd.quantile(min(max(_ncdf(G.quantile(p)), 1e-6), 1 - 1e-6))
-                      for p in _PITLEVELS]
-                yq = list(np.maximum.accumulate(yq))     # numerical monotonicity
-                out.append(fs.quantile_dist(_PITLEVELS, yq))
-            u = min(max(fd.cdf(yt), 1e-6), 1 - 1e-6)
-            d, st = f(_nppf(u), st); pend = d[0]
+        # z_j = Phi^{-1}(F_j(y_j)) matures when y_j arrives. The FM forecast for
+        # target i was issued at i-h, so G must be laplace's h-step predictive
+        # from z_{<=i-h}, not a one-step predictive fed z_{i-1} (#273).
+        z = [_nppf(min(max(fd.cdf(ch[ext + i]), 1e-6), 1 - 1e-6))
+             for i, fd in enumerate(fmx)]
+        preds = _hstep_predictives(z, h); out = []
+        for i in range(_RESID_WARM, len(fmx)):
+            fd = fmx[i]; G = preds[i]
+            yq = [fd.quantile(min(max(_ncdf(G.quantile(p)), 1e-6), 1 - 1e-6))
+                  for p in _PITLEVELS]
+            yq = list(np.maximum.accumulate(yq))     # numerical monotonicity
+            out.append(fs.quantile_dist(_PITLEVELS, yq))
         return out
     return run
 
@@ -449,11 +468,17 @@ def portfolio_sandwich(fm_fn, forget=0.98, eta=0.8, lap_prior=None, h=1):
         if rec is None or len(lap) != len(rec):
             return None
         y = ch[len(ch) - TEST:]
-        lw = [prior, 0.0]; out = []
+        # Both components forecast y[i] from information at i-h, so the weights
+        # mixing them must be those that stood at i-h: snap[k] holds the
+        # log-weights after scoring y[<k] (#273).
+        lw = [prior, 0.0]; snap = []; out = []
         for i in range(len(lap)):
-            m = max(lw); w = [math.exp(x - m) for x in lw]; tot = sum(w)
+            snap.append(list(lw))
+            k = i - h + 1
+            lwi = snap[k] if k >= 0 else [prior, 0.0]
+            m = max(lwi); w = [math.exp(x - m) for x in lwi]; tot = sum(w)
             w = [x / tot for x in w]
-            out.append(mix_dists([lap[i], rec[i]], w))       # predict y[i] from y[<i]
+            out.append(mix_dists([lap[i], rec[i]], w))       # predict y[i] from y[<=i-h]
             for j, d in enumerate((lap[i], rec[i])):          # then learn from y[i]
                 lp = d.logpdf(float(y[i]))
                 lp = 20.0 if lp > 20.0 else (-20.0 if not (lp >= -20.0) else lp)
