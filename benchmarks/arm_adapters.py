@@ -719,6 +719,9 @@ def make_registry(h=1):
         "Chronos":     lambda ch: fs.chronos_dists(ch, h),
         "TimesFM":     lambda ch: fs.timesfm_dists(ch, h),
         "TimesFM3":    lambda ch: fs.timesfm3_dists(ch, h),
+        # same forecasts, the widest reconstruction in nozzles.py (issue #269): the
+        # reconstruction most favourable to TimesFM3 on the nozzle study's sample
+        "TimesFM3(wide)": lambda ch: fs.timesfm3_dists(ch, h, recon=__import__("nozzles").nozzle_wide),
         "TimesFM+lap": _sandwich(fs.timesfm_dists, h),
         "TimesFM3+lap": _sandwich(fs.timesfm3_dists, h),
         "TiRex+lap":   _sandwich(tirex_dists, h),

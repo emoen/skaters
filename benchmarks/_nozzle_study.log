@@ -105,6 +105,11 @@
   local: mean logpdf +1.4159
   narrow: mean logpdf -0.3731
   wide: mean logpdf +2.1043
+  laplace on the same points: mean logpdf +2.2062
+  laplace minus grid, per-series mean dLL (floor -20): median +0.0294, laplace better on 58/100 series
+  laplace minus local, per-series mean dLL (floor -20): median +0.5585, laplace better on 75/100 series
+  laplace minus narrow, per-series mean dLL (floor -20): median +2.5086, laplace better on 98/100 series
+  laplace minus wide, per-series mean dLL (floor -20): median -0.0076, laplace better on 48/100 series
   mean per-point nozzle spread (max-min logpdf): 3.1276
   median per-point nozzle spread: 1.0373
   local vs grid, mean logpdf diff: -0.6162

@@ -32,7 +32,9 @@ def _num(s):
 
 
 def parse_tables(text):
-    """Yield (label, n, win, draw, loss, dLL, loss_rate) for every results row.
+    """Yield (table, label, n, win, draw, loss, dLL, loss_rate) for every results
+    row, where `table` is the tab: label of the table the row sits in (rows are
+    collected until the next \\label{tab:...} line names their table).
 
     Rows look like:
       Daily, economic & $2{,}179$ & $66 / 923 / 1{,}190$ & $-0.854$ & $54.6\\,\\%$ \\\\
@@ -43,8 +45,14 @@ def parse_tables(text):
         return c
 
     out = []
+    pending = []
     for line in text.splitlines():
         line = line.strip()
+        m = re.search(r"\\label\{tab:([A-Za-z0-9_-]+)\}", line)
+        if m:
+            out.extend((m.group(1),) + r for r in pending)
+            pending = []
+            continue
         if "&" not in line or not line.endswith("\\\\"):
             continue
         cells = [clean(c) for c in line[:-2].split("&")]
@@ -57,8 +65,8 @@ def parse_tables(text):
         if len(wdl) != 3:
             continue
         try:
-            out.append((label, float(cells[1]), int(wdl[0]), int(wdl[1]),
-                        int(wdl[2]), float(cells[3]), float(cells[4])))
+            pending.append((label, float(cells[1]), int(wdl[0]), int(wdl[1]),
+                            int(wdl[2]), float(cells[3]), float(cells[4])))
         except ValueError:
             continue
     return out
@@ -67,23 +75,27 @@ def parse_tables(text):
 def main():
     text = open(PAPER).read()
     rows = parse_tables(text)
-    if len(rows) != 10:
-        print(f"FAIL: expected 10 result rows (5 raw + 5 wrapped), found {len(rows)}")
+    if len(rows) != 15:
+        print(f"FAIL: expected 15 result rows (5 raw + 5 wrapped + 5 wide), found {len(rows)}")
         for r in rows:
             print("   parsed:", r)
         return 1
+    for tab in ("raw", "wrapped", "wide"):
+        labels = [r[1] for r in rows if r[0] == tab]
+        if sorted(labels) != sorted(LABEL_TO_KEY):
+            print(f"FAIL: table {tab} does not hold the five strata exactly once: {labels}")
+            return 1
 
     h2h = constants.head_to_head()
+    h2h_wide = constants.head_to_head("TimesFM3(wide)")
     noz = constants.nozzle()
     bad = []
 
-    for i, (label, n, w, d, l, dll, lr) in enumerate(rows):
-        rec = h2h[LABEL_TO_KEY[label]]
-        wrapped = i >= 5
-        p = "wrapped_" if wrapped else ""
+    for (tag, label, n, w, d, l, dll, lr) in rows:
+        rec = (h2h_wide if tag == "wide" else h2h)[LABEL_TO_KEY[label]]
+        p = "wrapped_" if tag == "wrapped" else ""
         exp = (rec[p + "n_series"], rec[p + "win"], rec[p + "draw"], rec[p + "loss"],
                rec[p + "med_dLL"], rec[p + "loss_rate"] * 100)
-        tag = "wrapped" if wrapped else "raw"
         if (n, w, d, l) != exp[:4]:
             bad.append(f"{tag:8s} {label:22s} counts: paper {(n,w,d,l)} vs store {exp[:4]}")
         if abs(dll - round(exp[4], 3)) > 5e-4:
@@ -96,6 +108,14 @@ def main():
         ("worst nozzle mean logpdf", round(min(noz["methods"].values()), 3), -0.373),
         ("best nozzle mean logpdf", round(max(noz["methods"].values()), 3), 2.104),
         ("mean per-point spread", round(noz["mean_spread"], 2), 3.13),
+        ("laplace mean logpdf on the nozzle points", round(noz["laplace_mean"], 3), 2.206),
+        ("laplace minus wide, median", round(noz["lap_minus_wide_median"], 3), -0.008),
+        ("wide table: smallest median dLL", round(min(r["med_dLL"] for r in h2h_wide.values()), 2), -0.08),
+        ("wide table: largest median dLL", round(max(r["med_dLL"] for r in h2h_wide.values()), 2), 0.05),
+        ("wide table: strata where model wins more than loses", sum(r["win"] > r["loss"] for r in h2h_wide.values()), 3),
+        ("laplace minus wide, wins", noz["lap_minus_wide_wins"], 48),
+        ("laplace minus local, median", round(noz["lap_minus_local_median"], 3), 0.558),
+        ("laplace minus local, wins", noz["lap_minus_local_wins"], 75),
         ("local vs grid", round(abs(noz["local_vs_grid"]), 2), 0.62),
     ]
     for name, store_val, paper_val in checks:

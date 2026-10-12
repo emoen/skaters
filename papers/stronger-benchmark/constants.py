@@ -20,7 +20,8 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
 SUMMARY = os.path.join(ROOT, "benchmarks", "canonical_summary_vs_laplace.csv")
 SRC = os.path.join(ROOT, "src")
 PERF = os.path.join(ROOT, "benchmarks", "perf_results.json")
@@ -96,6 +97,11 @@ def nozzle():
         "methods": methods,
         "mean_spread": g(r"mean per-point nozzle spread \(max-min logpdf\): ([\d.]+)"),
         "median_spread": g(r"median per-point nozzle spread: ([\d.]+)"),
+        "laplace_mean": g(r"laplace on the same points: mean logpdf ([-+][\d.]+)"),
+        "lap_minus_wide_median": g(r"laplace minus wide, per-series mean dLL \(floor -20\): median ([-+][\d.]+)"),
+        "lap_minus_wide_wins": int(re.search(r"laplace minus wide,.*laplace better on (\d+)/", txt).group(1)),
+        "lap_minus_local_median": g(r"laplace minus local, per-series mean dLL \(floor -20\): median ([-+][\d.]+)"),
+        "lap_minus_local_wins": int(re.search(r"laplace minus local,.*laplace better on (\d+)/", txt).group(1)),
         "local_vs_grid": g(r"local vs grid, mean logpdf diff: ([-+][\d.]+)"),
         "narrow_vs_grid": g(r"narrow vs grid, mean logpdf diff: ([-+][\d.]+)"),
         "worst_gap": abs(g(r"narrow vs grid, mean logpdf diff: ([-+][\d.]+)")),
@@ -174,7 +180,20 @@ def classic_baselines():
         for r in _csv.DictReader(fh):
             lp = float(r["logpdf"]) if r["logpdf"] not in ("", "nan") else float("nan")
             rows.setdefault(r["series"], {})[r["method"]] = (lp, float(r["crps"]))
-    cont = [s for s in rows if "laplace" in rows[s] and _rfrac(s) < 0.05]
+    # The continuity filter (_rfrac < 0.05, the share of repeated values) needs
+    # the FRED level cache, which a clone does not have. The classification is
+    # frozen in continuity_filter.txt next to this file, one series id per line,
+    # and that file is the record. Regenerate it only with the cache present:
+    #   FREEZE_CONTINUITY=1 python constants.py
+    cont_file = os.path.join(HERE, "continuity_filter.txt")
+    if os.environ.get("FREEZE_CONTINUITY") or not os.path.exists(cont_file):
+        cont = [s for s in rows if "laplace" in rows[s] and _rfrac(s) < 0.05]
+        with open(cont_file, "w") as fh:
+            fh.write("\n".join(sorted(cont)) + "\n")
+    else:
+        with open(cont_file) as fh:
+            frozen = {line.strip() for line in fh if line.strip()}
+        cont = [s for s in rows if "laplace" in rows[s] and s in frozen]
 
     out = {}
     for key, pretty in CLASSIC_ARMS.items():

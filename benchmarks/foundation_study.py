@@ -266,10 +266,12 @@ def timesfm_dists(ch, h=1):
 
 
 _timesfm3 = None
-def timesfm3_dists(ch, h=1):
+def timesfm3_dists(ch, h=1, recon=None):
     """TimesFM 3.0 zero-shot, univariate mode; 9-decile quantile output ->
     quantile_dist. Same windowing contract as timesfm_dists: for h>1 the
     context ends h steps before each target and the horizon-h row is scored.
+    `recon(levels, qs) -> Dist` replaces quantile_dist (the `local` nozzle) so
+    the same forecasts can be scored under another reconstruction (#269).
 
     Weights (google/timesfm-3.0-pytorch) are under timesfm-non-commercial
     -license-v1.0: research benchmarking only, no production use. The 3.0
@@ -306,12 +308,13 @@ def timesfm3_dists(ch, h=1):
             use_symmetric_averaging=False,
             make_positive=False, univariate=True))
         levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        build = recon if recon is not None else quantile_dist
         dists = []
         for o in outs:
             q = np.asarray(o.quantiles, dtype=float)   # [h, 9] univariate
             if q.ndim == 3:                            # [1, h, 9] defensive
                 q = q[0]
-            dists.append(quantile_dist(levels, q[h - 1]))
+            dists.append(build(levels, q[h - 1]))
         if len(dists) != TEST:
             raise ValueError(f"expected {TEST} outputs, got {len(dists)}")
         return dists

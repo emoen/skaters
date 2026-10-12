@@ -11,6 +11,7 @@ daily:econ,TimesFM,88192,0.8348,0.5507
 daily:econ,TimesFM&lap,87680,0.9219,0.5612
 daily:econ,TimesFM3,141440,0.8315,0.5288
 daily:econ,TimesFM3&lap,141440,0.9224,0.5389
+daily:econ,TimesFM3(wide),141440,0.8854,0.5290
 daily:econ,TimesFM3+lap,141440,0.8860,0.5294
 daily:econ,TimesFM3@lap,141440,0.9195,0.5295
 daily:econ,TimesFM3~lap,141440,0.9284,0.5312
@@ -29,6 +30,7 @@ daily:price,TimesFM,97856,0.7981,0.5148
 daily:price,TimesFM&lap,96640,0.9209,0.5129
 daily:price,TimesFM3,557120,0.8089,0.5176
 daily:price,TimesFM3&lap,557120,0.9228,0.5124
+daily:price,TimesFM3(wide),579776,0.8728,0.5171
 daily:price,TimesFM3+lap,557120,0.8749,0.5155
 daily:price,TimesFM3@lap,557120,0.9173,0.5171
 daily:price,TimesFM3~lap,557120,0.9285,0.5174
@@ -46,6 +48,7 @@ m4-hourly:econ,TimesFM,26496,0.8156,0.5126
 m4-hourly:econ,TimesFM&lap,26496,0.9036,0.4975
 m4-hourly:econ,TimesFM3,26496,0.8287,0.5261
 m4-hourly:econ,TimesFM3&lap,26496,0.9026,0.4910
+m4-hourly:econ,TimesFM3(wide),26496,0.8898,0.5282
 m4-hourly:econ,TimesFM3+lap,26496,0.8953,0.5240
 m4-hourly:econ,TimesFM3@lap,26496,0.9151,0.5224
 m4-hourly:econ,TimesFM3~lap,26496,0.9254,0.5158
@@ -65,6 +68,7 @@ monthly:econ,TimesFM,186240,0.8012,0.5041
 monthly:econ,TimesFM&lap,170560,0.9210,0.5153
 monthly:econ,TimesFM3,3103552,0.8024,0.4978
 monthly:econ,TimesFM3&lap,2883456,0.9137,0.5052
+monthly:econ,TimesFM3(wide),358400,0.8618,0.4968
 monthly:econ,TimesFM3+lap,3103552,0.8903,0.4975
 monthly:econ,TimesFM3@lap,2883456,0.9064,0.4953
 monthly:econ,TimesFM3~lap,2883456,0.9429,0.5035
@@ -83,6 +87,7 @@ weekly:econ,TimesFM,186368,0.8292,0.5586
 weekly:econ,TimesFM&lap,184192,0.9155,0.5605
 weekly:econ,TimesFM3,192832,0.8460,0.5524
 weekly:econ,TimesFM3&lap,192704,0.9165,0.5639
+weekly:econ,TimesFM3(wide),192832,0.8909,0.5539
 weekly:econ,TimesFM3+lap,192832,0.8995,0.5372
 weekly:econ,TimesFM3@lap,192704,0.9140,0.5524
 weekly:econ,TimesFM3~lap,192704,0.9337,0.5497
