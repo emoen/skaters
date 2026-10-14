@@ -34,7 +34,7 @@ overwrites the shipped `.bbl` with an empty one.
 Reported progress for foundation time-series models rests on comparisons that
 leave out a strong classical reference. Across eleven benchmark papers the
 classical arms are per-window refits of ETS, ARIMA and Theta; no online
-forecaster appears, and no suite scores a predictive density. We supply the
+forecaster appears, and no suite scores a full predictive density by log score. We supply the
 missing reference: laplace, an online distributional forecaster with no
 pretraining and no tunable parameters. Scored one step ahead on held-out log
 density over an 18,815-series FRED panel, it beats TimesFM 3.0 on the median
@@ -58,7 +58,7 @@ https://skaters.microprediction.org.
 
 ## Before submitting
 
-- The date line is the compile date; arXiv's own build sets it.
-- `cotton2026transforms` is cited as a techreport with no SSRN id. Put the id
-  in `benchmark.bib`, rebuild the `.bbl`, and rebuild the pack.
+- The date is a fixed string in the tex (`\date{...}`); update it for a revision.
+- `cotton2026transforms` carries its SSRN id (7220478); the companion paper
+  was posted 4 August 2026.
 - Re-run `verify_paper.py` on the tex that goes into the pack.
