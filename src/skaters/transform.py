@@ -1037,18 +1037,35 @@ def _ar_spectral_radius(phi: list[float]) -> float:
             r = math.sqrt(disc)
             return max(abs((a + r) / 2.0), abs((a - r) / 2.0))
         return math.hypot(a / 2.0, math.sqrt(-disc) / 2.0)   # |complex root|
-    v = [1.0] * p
-    rho = 0.0
-    for _ in range(60):
-        nv = [sum(phi[j] * v[j] for j in range(p))] + v[:-1]
-        m = max(abs(x) for x in nv) or 1.0
-        v = [x / m for x in nv]
-        rho = m
-    return rho
+    # Power iteration from a single seed can silently miss the true dominant
+    # eigenvalue if that seed happens to be (near-)orthogonal to it, e.g. an
+    # eigenvector of a smaller eigenvalue (skaters#232 comment: phi=[3,-2,0,0,0]
+    # seeded at all-ones converges to 1 instead of the true radius 2, since
+    # all-ones is exactly an eigenvector for eigenvalue 1 there). Two seeds
+    # unlikely to BOTH align with a non-dominant eigenvector; take the max.
+    best = 0.0
+    for seed in ([1.0] * p, [(-1.0) ** i for i in range(p)]):
+        v = list(seed)
+        rho = 0.0
+        for _ in range(60):
+            nv = [sum(phi[j] * v[j] for j in range(p))] + v[:-1]
+            m = max(abs(x) for x in nv) or 1.0
+            v = [x / m for x in nv]
+            rho = m
+        best = max(best, rho)
+    return best
 
 
 def _ar_stationary(phi: list[float], margin: float = 0.999) -> list[float]:
-    """Damp AR coefficients into the stationary region for forecasting.
+    """Project toward the stationary region using the radius estimate below.
+
+    The estimate is a heuristic, not a certificate: the power iteration can
+    miss the dominant root when every seed is an eigenvector of another
+    root (phi = [2, 1, -2] reads radius 1.0; true radius 2), so the
+    projected coefficients are not guaranteed stationary. A proper
+    Schur/reflection-coefficient test is tracked in skaters#232.
+
+    Damp AR coefficients into the stationary region for forecasting.
 
     An online least-squares fit — especially from a handful of warm-up points —
     can land outside the stationary region (a near-unit or explosive root). Its
@@ -1111,21 +1128,43 @@ def ar(order: int = 2, lam: float = 0.99, ridge: float = 1.0,
             state = {
                 "buffer": [],
                 "phi": [0.0] * p,
+                "phi_used": [0.0] * p,
                 "P": _init_P(),
                 "n": 0,
             }
 
         buf = state["buffer"]
         phi = state["phi"]
+        if "phi_used" not in state:
+            # A checkpoint from before skaters#232/#235 carries only the raw
+            # RLS coefficients; the projected set is a function of them.
+            state["phi_used"] = _ar_stationary(list(phi))
         state["n"] += 1
 
         if len(buf) >= p:
             # Regressor: [y_{t-1}, y_{t-2}, ..., y_{t-p}]
             x = [buf[-(i + 1)] for i in range(p)]
-            prediction = sum(phi[i] * x[i] for i in range(p))
+
+            # The residual EMITTED downstream (and later used by inverse_k's
+            # forecast) is built from `phi_used` -- the stationarity-projected
+            # coefficients as of the END of the previous tick -- not the raw
+            # RLS estimate. Previously forward() emitted residuals under the
+            # unconstrained `phi` while inverse_k() reconstructed under
+            # `_ar_stationary(phi)`: the leaf learned errors from one predictor
+            # while forecasting used a different one, and a single
+            # ill-conditioned RLS update (e.g. a long zero run then a jump)
+            # could push `phi` non-stationary with nothing downstream any the
+            # wiser until inverse_k's reconstruction diverged (skaters#232).
+            phi_used = state["phi_used"]
+            prediction = sum(phi_used[i] * x[i] for i in range(p))
             residual = y - prediction
 
-            # RLS update
+            # RLS update keeps fitting the RAW (unconstrained) least-squares
+            # problem, using its own prediction error -- projecting first
+            # would corrupt the estimator's own error signal and stop it
+            # being a proper least-squares fit.
+            raw_prediction = sum(phi[i] * x[i] for i in range(p))
+            raw_residual = y - raw_prediction
             P = state["P"]
             Px = _mat_vec(P, x, p)
             denom = lam + _dot(x, Px, p)
@@ -1133,7 +1172,7 @@ def ar(order: int = 2, lam: float = 0.99, ridge: float = 1.0,
                 K = [px / denom for px in Px]
                 # Update phi
                 for i in range(p):
-                    phi[i] += K[i] * residual
+                    phi[i] += K[i] * raw_residual
                 # Update P: P = (P - K * x' * P) / lam
                 for i in range(p):
                     for j in range(p):
@@ -1145,6 +1184,10 @@ def ar(order: int = 2, lam: float = 0.99, ridge: float = 1.0,
                 # on well-excited data, so results there are unchanged.
                 if not all(math.isfinite(v) for v in P) or max(abs(v) for v in P) > 1e10:
                     P[:] = _init_P()
+            # Re-project after every update (not just at extrapolation time)
+            # so forward's next emission and inverse_k always agree on the
+            # same constrained coefficients.
+            state["phi_used"] = _ar_stationary(phi)
         else:
             residual = y
 
@@ -1174,10 +1217,14 @@ def ar(order: int = 2, lam: float = 0.99, ridge: float = 1.0,
         it explodes. The MA form converges for any stationary AR.
         """
         buf = list(state["buffer"])
-        # Forecast with stationarity-constrained coefficients: a non-stationary
-        # online fit has no convergent multi-step forecast. The one-step fit in
-        # `state` is left intact; only the extrapolation is kept well-posed.
-        phi = _ar_stationary(state["phi"])
+        # Use the SAME stationarity-constrained coefficients forward() already
+        # emitted residuals under (skaters#232) -- `phi_used` is maintained
+        # incrementally in forward(), not re-derived here, so extrapolation
+        # and the one-step residual stream never disagree on which predictor
+        # produced them. A pre-#235 checkpoint has no cache yet: derive it.
+        phi = state.get("phi_used")
+        if phi is None:
+            phi = _ar_stationary(list(state["phi"]))
         H = len(dists)
 
         # Impulse responses psi_0..psi_{H-1}: psi_0 = 1, psi_i = sum_j phi_j psi_{i-j}.
@@ -1251,28 +1298,42 @@ def grouped_ar(max_lag: int = 16, lam: float = 0.99, ridge: float = 1.0):
             state = {
                 "buffer": [],
                 "theta": [0.0] * n_groups,  # group-level coefficients
+                "phi_used": [0.0] * max_lag,  # expanded, stationarity-projected
                 "P": _eye(n_groups, ridge),
                 "n": 0,
             }
 
         buf = state["buffer"]
         theta = state["theta"]
+        if "phi_used" not in state:
+            # pre-#235 checkpoint: the projected per-lag set follows from theta
+            state["phi_used"] = _ar_stationary([state["theta"][groups[j]] for j in range(max_lag)])
         state["n"] += 1
 
         if len(buf) >= max_lag:
             # Build group-aggregated regressor
             x = _group_regressor(buf, groups, n_groups, max_lag)
-            prediction = sum(theta[g] * x[g] for g in range(n_groups))
+
+            # Emitted residual uses the previous tick's stationarity-projected,
+            # per-lag coefficients -- same fix and same reasoning as ar()
+            # (skaters#232): forward's emission and inverse_k's reconstruction
+            # must agree on which predictor produced the residual.
+            phi_used = state["phi_used"]
+            lag_x = [buf[-(j + 1)] for j in range(max_lag)]
+            prediction = sum(phi_used[j] * lag_x[j] for j in range(max_lag))
             residual = y - prediction
 
-            # RLS update on group-level coefficients
+            # RLS update keeps fitting the RAW group-level least-squares
+            # problem with its own prediction error.
+            raw_prediction = sum(theta[g] * x[g] for g in range(n_groups))
+            raw_residual = y - raw_prediction
             P = state["P"]
             Px = _mat_vec(P, x, n_groups)
             denom = lam + _dot(x, Px, n_groups)
             if abs(denom) > 1e-15:
                 K = [px / denom for px in Px]
                 for g in range(n_groups):
-                    theta[g] += K[g] * residual
+                    theta[g] += K[g] * raw_residual
                 for i in range(n_groups):
                     for j in range(n_groups):
                         P[i * n_groups + j] = (
@@ -1283,6 +1344,7 @@ def grouped_ar(max_lag: int = 16, lam: float = 0.99, ridge: float = 1.0):
                 # well-excited data.
                 if not all(math.isfinite(v) for v in P) or max(abs(v) for v in P) > 1e10:
                     P[:] = _eye(n_groups, ridge)
+            state["phi_used"] = _ar_stationary([theta[groups[j]] for j in range(max_lag)])
         else:
             residual = y
 
@@ -1294,10 +1356,12 @@ def grouped_ar(max_lag: int = 16, lam: float = 0.99, ridge: float = 1.0):
 
     def inverse_k(dists: list[Dist], state: dict) -> list[Dist]:
         buf = list(state["buffer"])
-        theta = state["theta"]
-        # Expand group coefficients to per-lag, then constrain to stationarity
-        # for a well-posed forecast (same fix as `ar`; grouped AR is AR-family).
-        phi = _ar_stationary([theta[groups[j]] for j in range(max_lag)])
+        # Same coefficients forward() already emitted residuals under
+        # (skaters#232) -- maintained incrementally there, not re-derived here,
+        # except for a pre-#235 checkpoint that has no cache yet.
+        phi = state.get("phi_used")
+        if phi is None:
+            phi = _ar_stationary([state["theta"][groups[j]] for j in range(max_lag)])
         H = len(dists)
         psi = [1.0]
         for i in range(1, H):
